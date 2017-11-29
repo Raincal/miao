@@ -4,6 +4,7 @@
 
 __author__ = 'Raincal'
 
+from multiprocessing import Pool
 import os
 import requests
 
@@ -17,12 +18,12 @@ def getJSONData(url, data={}):
         r.raise_for_status()
         return r.json()
     except:
-        return {}
+        return {'status': 4000}
 
 
 def getPageSize(url):
     maxPage = getJSONData(url)['data']['activity']['pageIndexMax']
-    return maxPage
+    return int(maxPage)
 
 
 def getFileName(url):
@@ -38,31 +39,36 @@ def saveImg(imgUrl, imgPath=''):
         os.mkdir('yirimao/' + imgPath)
 
     ipath = 'yirimao/' + imgPath + fname
-    if not os.path.isfile(ipath):
+    if not os.path.exists(ipath):
         r = requests.get(imgUrl)
         with open(ipath, 'wb') as f:
             f.write(r.content)
             print('%s saved.' % fname)
 
 
+def main(page):
+    print('crawing page %d' % page)
+    data = {'pageIndex': page}
+    json = getJSONData(url, data)
+
+    if json['status'] == 2000:
+        if json['data']['catPrizeWallpaper']:
+            wpUrl = json['data']['catPrizeWallpaper']['cover']
+            saveImg(wpUrl, 'wallpaper/')
+
+        cards = json['data']['activity']['cards']
+        for card in cards:
+            if card['category']['id'] != 3:
+                saveImg(card['imageUrl'])
+    elif json['status'] == 4000 and json['data'] is None:
+        print('page %d data does not exist!' % page)
+
+
 if __name__ == '__main__':
     url = 'https://app-api.yirimao.com/v1/activity/activity/newest'
     pages = getPageSize(url)
-    print('total pages %s' % pages)
-    for i in range(int(pages)):
-        print('crawing page %d' % i)
-        data = {'pageIndex': i}
-        json = getJSONData(url, data)
-
-        if json['status'] == 2000:
-            if json['data']['catPrizeWallpaper']:
-                wpUrl = json['data']['catPrizeWallpaper']['cover']
-                saveImg(wpUrl, 'wallpaper/')
-
-            cards = json['data']['activity']['cards']
-            for card in cards:
-                if card['category']['id'] != 3:
-                    saveImg(card['imageUrl'])
-        elif json['status'] == 4000 and json['data'] is None:
-            print('page %d data does not exist!\nFinish~' % i)
-            break
+    print('total pages %d' % pages)
+    pool = Pool()
+    pool.map(main, range(pages))
+    pool.close()
+    pool.join()
